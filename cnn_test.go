@@ -1,35 +1,41 @@
 package neatgo
 
 import (
-	"cnn/mnist"
 	"fmt"
-	"log"
 	"testing"
 )
 
 // go test cnn -run TestCNN -v -count=1
 func TestCNN(t *testing.T) {
-	input := normalization([][]float64{
+	input := [][][]float64{normalization([][]float64{
 		{1, 2, 3, 2, 1},
 		{4, 5, 6, 5, 4},
 		{7, 8, 9, 8, 7},
 		{4, 5, 6, 5, 4},
 		{1, 2, 3, 2, 1},
-	})
+	}), normalization([][]float64{
+		{11, 22, 33, 22, 11},
+		{44, 55, 66, 55, 44},
+		{77, 88, 99, 88, 77},
+		{44, 55, 66, 55, 44},
+		{11, 22, 33, 22, 11},
+	})}
 	wants := []float64{1, 0}
 
-	conv := NewConvolution(3, 3, 2, 1)
+	conv := NewConvolution(2, 2, 2, 1)
+	conv2 := NewConvolution(2, 2, 2, 1)
 	pool := NewMaxPool(2, 2)
-	learnRate := 0.3
+	pool2 := NewMaxPool(2, 2)
+	learnRate := 0.6
 
-	iw, ih := len(input[0]), len(input)
+	iw, ih, id := len(input[0][0]), len(input[0]), len(input)
 	sw, sh := SoftmaxHelper(iw, ih, conv, pool)
-	fmt.Printf("input size: %d*%d\n", iw, ih)
+	fmt.Printf("input size: %d*%d*%d\n", iw, ih, id)
 	fmt.Printf("conv size: %d*%d*%d step:%d\n", conv.w, conv.h, conv.depth, conv.step)
 	fmt.Printf("pool size: %d*%d\n", pool.w, pool.h)
 	fmt.Printf("softmax size: %d*%d\n", sw, sh)
 	fmt.Printf("learn rate: %.4f\n", learnRate)
-	softmax := NewSoftmax(sw, sh, conv.depth, len(wants))
+	softmax := NewSoftmax(sw, sh, conv.depth*len(input), len(wants))
 
 	count := 10000
 	debug := false
@@ -37,14 +43,22 @@ func TestCNN(t *testing.T) {
 		debug = true
 		fmt.Print("\033c")
 	}
+	// conv => pool => conv => pool => softmax
+	// 4x4     2x2      1x1    1x1      2
 	for c := 0; c < count; c++ {
 		out := conv.Forward(input)
 		print3(debug, "conv", out)
 
-		out2 := pool.Forward(out)
-		print3(debug, "pool", out2)
+		out = pool.Forward(out)
+		print3(debug, "pool", out)
 
-		outputs := softmax.Forward(out2)
+		out = conv2.Forward(input)
+		print3(debug, "conv2", out)
+
+		out = pool2.Forward(out)
+		print3(debug, "pool2", out)
+
+		outputs := softmax.Forward(out)
 		print1(debug, "outputs:", outputs)
 
 		if c%1000 == 0 {
@@ -58,14 +72,21 @@ func TestCNN(t *testing.T) {
 		gradient := softmax.Backprop(outputs, wants, learnRate)
 		print3(debug, "softmax.backprop", gradient)
 
+		gradient = pool2.Backprop(gradient)
+		print3(debug, "pool2.backprop", gradient)
+
+		gradient = conv2.Backprop(gradient, learnRate)
+		print3(debug, "conv2.filters", gradient)
+
 		gradient = pool.Backprop(gradient)
 		print3(debug, "pool.backprop", gradient)
 
-		gradient = conv.Backprop(gradient, pool.maxIndex, learnRate)
+		gradient = conv.Backprop(gradient, learnRate)
 		print3(debug, "conv.filters", gradient)
 	}
 }
 
+/*
 // go test cnn -run TestMnist -v -count=1
 func TestMnist(t *testing.T) {
 	dataTrain, err := mnist.ReadTrainSet("./mnist/MNIST_data")
@@ -171,6 +192,7 @@ func TestMnist(t *testing.T) {
 		}
 	}
 }
+// */
 
 // go test cnn -run Test1 -v -count=1
 func Test1(t *testing.T) {
@@ -196,12 +218,14 @@ func Test1(t *testing.T) {
 		return out
 	}
 
-	d1 := [][]float64{
-		{0.51, 0.9, 0.88, 0.84, 0.05},
-		{0.4, 0.62, 0.22, 0.59, 0.1},
-		{0.11, 0.2, 0.74, 0.33, 0.14},
-		{0.47, 0.01, 0.85, 0.7, 0.09},
-		{0.76, 0.19, 0.72, 0.17, 0.57},
+	d1 := [][][]float64{
+		{
+			{0.51, 0.9, 0.88, 0.84, 0.05},
+			{0.4, 0.62, 0.22, 0.59, 0.1},
+			{0.11, 0.2, 0.74, 0.33, 0.14},
+			{0.47, 0.01, 0.85, 0.7, 0.09},
+			{0.76, 0.19, 0.72, 0.17, 0.57},
+		},
 	}
 	d2 := [][][]float64{
 		{
@@ -215,7 +239,7 @@ func Test1(t *testing.T) {
 	d2r := rotate180(d2)
 	fmt.Println(rotate180(d2r))
 
-	fmt.Println(cnn(d1, d2[0]))
-	fmt.Println(cnn(d1, d2r[0]))
+	fmt.Println(cnn(d1[0], d2[0]))
+	fmt.Println(cnn(d1[0], d2r[0]))
 	fmt.Println(matrixMul(d1, d2r))
 }

@@ -71,32 +71,35 @@ func normalization(input [][]float64) [][]float64 {
 	return input
 }
 
-func matrixMul(img [][]float64, filter [][][]float64) [][][]float64 {
+func matrixMul(img [][][]float64, filter [][][]float64) [][][]float64 {
 	w, h, d := len(filter[0][0]), len(filter[0]), len(filter)
-	imw, imh := len(img[0]), len(img)
+	imw, imh := len(img[0][0]), len(img[0])
 	// fmt.Println(w, h, d)
-	// fmt.Println(imw, imh)
-	out := make([][][]float64, d)
+	// fmt.Println(len(img), imw, imh)
+	out := make([][][]float64, len(img)*d)
 
-	for k := 0; k < d; k++ {
-		tmp := make([][]float64, imh-h+1)
-		for y := 0; y <= imh-h; y++ {
-			row := make([]float64, imw-w+1)
-			for x := 0; x <= imw-w; x++ {
-				sum := 0.0
-				// htm := []string{}
-				for b := 0; b < h; b++ {
-					for a := 0; a < w; a++ {
-						sum += img[y+b][x+a] * filter[k][b][a]
-						// htm = append(htm, fmt.Sprintf("%.4f*%.4f=%.4f", img[y+b][x+a], filter[k][b][a], img[y+b][x+a]*filter[k][b][a]))
+	for j := 0; j < len(img); j++ {
+		for k := 0; k < d; k++ {
+			tmp := make([][]float64, imh-h+1)
+			for y := 0; y <= imh-h; y++ {
+				row := make([]float64, imw-w+1)
+				for x := 0; x <= imw-w; x++ {
+					sum := 0.0
+					// htm := []string{}
+					for b := 0; b < h; b++ {
+						for a := 0; a < w; a++ {
+							sum += img[j][y+b][x+a] * filter[k][b][a]
+							// htm = append(htm, fmt.Sprintf("%.4f*%.4f=%.4f", img[j][y+b][x+a], filter[k][b][a], img[j][y+b][x+a]*filter[k][b][a]))
+						}
 					}
+					// row[x] = sum / 0xff
+					row[x] = sum
+					// fmt.Println(strings.Join(htm, " + "), sum)
 				}
-				row[x] = sum / 0xff
-				// row[x] = sum
+				tmp[y] = row
 			}
-			tmp[y] = row
+			out[j*d+k] = tmp
 		}
-		out[k] = tmp
 	}
 
 	return out

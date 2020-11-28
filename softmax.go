@@ -1,6 +1,8 @@
 package neatgo
 
-import "math"
+import (
+	"math"
+)
 
 // Softmax ...
 type Softmax struct {
@@ -69,7 +71,8 @@ func (o *Softmax) Backprop(outputs []float64, wants []float64, learnRate float64
 		// fmt.Println("rdiff:", wants[k], o.outputs[k], rdiff[k])
 	}
 
-	// print2("o.weights 1:", o.weights)
+	// print3(true, "o.lastInput:", o.lastInput)
+	// print2(true, "o.weights 1:", o.weights)
 	for j := 0; j < len(o.lastInput); j++ {
 		for y := 0; y < o.y; y++ {
 			for x := 0; x < o.x; x++ {
