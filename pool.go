@@ -1,4 +1,4 @@
-package neatgo
+package cnn
 
 import (
 	"math"
@@ -6,92 +6,68 @@ import (
 
 // MaxPool ...
 type MaxPool struct {
-	w, h       int
+	W, H       int
 	maxIndex   [][]int
-	lastInput  [][][]float64
+	lastInput  *Matrix
 	padx, pady int
 }
 
 // NewMaxPool ...
 func NewMaxPool(w, h int) *MaxPool {
-	return &MaxPool{w: w, h: h}
+	return &MaxPool{W: w, H: h}
 }
 
 // Forward ...
-func (o *MaxPool) Forward(input [][][]float64) [][][]float64 {
+func (o *MaxPool) Forward(input *Matrix) *Matrix {
 	o.maxIndex = o.maxIndex[:0]
-	o.lastInput = input
-	out := make([][][]float64, len(input))
+	o.lastInput = input.Clone()
 
-	for j := 0; j < len(input); j++ {
-		padx := len(input[j][0]) % o.w
-		pady := len(input[j]) % o.h
-		if padx > 0 {
-			padx = o.w - padx
-			o.padx = padx
-		}
-		if pady > 0 {
-			pady = o.h - pady
-			o.pady = pady
-		}
+	padx := input.W % o.W
+	pady := input.H % o.H
+	if padx > 0 || pady > 0 {
+		input.Append(padx, pady)
+	}
 
-		for i := 0; i < pady; i++ {
-			input[j] = append(input[j], make([]float64, len(input[j][0])+padx))
-		}
-		if padx > 0 {
-			for k := range input[j] {
-				input[j][k] = append(input[j][k], 0)
-			}
-		}
-		tmp := [][]float64{}
-		for y := 0; y < len(input[j]); y += o.h {
-			row := []float64{}
-			for x := 0; x < len(input[j][0]); x += o.w {
+	out := NewMatrix(input.W/o.W, input.H/o.H, input.D, nil)
+
+	for k := 0; k < input.D; k++ {
+		for y := 0; y < input.H; y += o.H {
+			for x := 0; x < input.W; x += o.W {
 				max := math.Inf(-1)
 				index := []int{}
-				for b := 0; b < o.h; b++ {
-					for a := 0; a < o.w; a++ {
-						if input[j][y+b][x+a] > max {
-							max = input[j][y+b][x+a]
-							index = []int{j, y + b, x + a}
+				for b := 0; b < o.H; b++ {
+					for a := 0; a < o.W; a++ {
+						if input.Data[k][y+b][x+a] > max || max == math.Inf(-1) {
+							max = input.Data[k][y+b][x+a]
+							index = []int{k, y + b, x + a}
 						}
 					}
 				}
-				row = append(row, max)
+				out.Data[k][y/o.H][x/o.W] = max
 				o.maxIndex = append(o.maxIndex, index)
 			}
-			tmp = append(tmp, row)
 		}
-
-		out[j] = tmp
 	}
 
 	return out
 }
 
 // Backprop ...
-func (o *MaxPool) Backprop(inputs [][][]float64) [][][]float64 {
+func (o *MaxPool) Backprop(inputs *Matrix) *Matrix {
 	// fmt.Println("maxIndex:", o.maxIndex)
-	// print3("lastInput:", o.lastInput)
-	// print3("inputs:", inputs)
+	// print3(true, "lastInput:", o.lastInput.GetData())
+	// print3(true, "inputs:", inputs.GetData())
 
 	arr := []float64{}
-	for k := range inputs {
-		for y := 0; y < len(inputs[0]); y++ {
-			for x := 0; x < len(inputs[0][0]); x++ {
-				arr = append(arr, inputs[k][y][x])
+	for k := 0; k < inputs.D; k++ {
+		for y := 0; y < inputs.H; y++ {
+			for x := 0; x < inputs.W; x++ {
+				arr = append(arr, inputs.Data[k][y][x])
 			}
 		}
 	}
 
-	out := make([][][]float64, len(o.lastInput))
-	for k := range o.lastInput {
-		tmp := make([][]float64, len(o.lastInput[0])-o.pady)
-		for y := 0; y < len(o.lastInput[0])-o.pady; y++ {
-			tmp[y] = make([]float64, len(o.lastInput[0][0])-o.padx)
-		}
-		out[k] = tmp
-	}
+	out := NewMatrix(o.lastInput.W, o.lastInput.H, o.lastInput.D, nil)
 
 	// for k := range o.lastInput {
 	// 	for y := 0; y < len(o.lastInput[0])-o.pady; y++ {
@@ -103,10 +79,10 @@ func (o *MaxPool) Backprop(inputs [][][]float64) [][][]float64 {
 
 	index := 0
 	for _, v := range o.maxIndex {
-		out[v[0]][v[1]][v[2]] = arr[index]
+		out.Data[v[0]][v[1]][v[2]] = arr[index]
 		index++
 	}
 
-	// print3("out:", out)
+	// print3(true, "out:", out.GetData())
 	return out
 }

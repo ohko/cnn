@@ -1,113 +1,138 @@
-package neatgo
+package cnn
 
 import (
-	"math"
+	"encoding/json"
+	"io/ioutil"
 )
 
 // Softmax ...
 type Softmax struct {
-	x, y, d   int
-	weights   [][]float64
-	outputs   []float64
-	lastInput [][][]float64
+	x, y, d, out int
+	Weights      [][]float64
+	lastInput    *Matrix
 }
 
 // NewSoftmax ...
 func NewSoftmax(x, y, d, out int) *Softmax {
-	o := &Softmax{x: x, y: y, d: d}
+	o := &Softmax{x: x, y: y, d: d, out: out}
 	n := x * y * d
 	for i := 0; i < out; i++ {
 		w := make([]float64, n)
 		for j := 0; j < n; j++ {
-			w[j] = Random(0, 1)
+			w[j] = Random(0, 1) - 0.5
 		}
-		o.weights = append(o.weights, w)
-	}
-	for i := 0; i < out; i++ {
-		o.outputs = append(o.outputs, 0)
+		o.Weights = append(o.Weights, w)
 	}
 	return o
 }
 
 // Forward ...
-func (o *Softmax) Forward(input [][][]float64) []float64 {
-	o.lastInput = input
+func (o *Softmax) Forward(input *Matrix) []float64 {
+	o.lastInput = input.Clone()
+	outputs := make([]float64, o.out)
 
-	for k := range o.outputs {
+	// print1(true, "outputs", outputs)
+	// print3(true, "input", input.GetData())
+	// print2(true, "o.Weights", o.Weights)
+
+	for j := range outputs {
 		sum := 0.0
-		// htm := []string{}
-		for j := 0; j < len(input); j++ {
-			for y := 0; y < o.y; y++ {
-				for x := 0; x < o.x; x++ {
-					sum += input[j][y][x] * o.weights[k][o.y*y+x]
-					// htm = append(htm, fmt.Sprintf("[%d]%.2f*%.2f", o.y*y+x, input[j][y][x], o.weights[k][o.y*y+x]))
+		index := 0
+		for k := 0; k < input.D; k++ {
+			for y := 0; y < input.H; y++ {
+				for x := 0; x < input.W; x++ {
+					sum += input.Data[k][y][x] * o.Weights[j][index]
+					index++
 				}
 			}
 		}
-		// fmt.Println(strings.Join(htm, " + "))
-		// fmt.Println("sum:", sum)
-		// o.outputs[k] = sigmoid(sum / 338.0)
-		o.outputs[k] = sigmoid(sum)
+		outputs[j] = sigmoid(sum)
 	}
-	return o.outputs
+	return outputs
 }
 
 // Backprop ...
-func (o *Softmax) Backprop(outputs []float64, wants []float64, learnRate float64) [][][]float64 {
-	rdiff := make([]float64, len(o.outputs))
+func (o *Softmax) Backprop(wants, outputs []float64, learnRate float64) *Matrix {
+	rdiff := make([]float64, len(outputs))
+	rinput := NewMatrix(o.lastInput.W, o.lastInput.H, o.lastInput.D, nil)
 
-	rinput := make([][][]float64, len(o.lastInput))
-	for j := 0; j < len(o.lastInput); j++ {
-		tmp := make([][]float64, len(o.lastInput[j]))
-		for y := 0; y < len(o.lastInput[j]); y++ {
-			tmp[y] = make([]float64, len(o.lastInput[j][0]))
-		}
-		rinput[j] = tmp
+	for k := range outputs {
+		rdiff[k] = -(outputs[k] - wants[k]) * outputs[k] * (1 - outputs[k])
+		// fmt.Printf("\nrdiff: -(%.4f - %.4f) * %.4f * (1 - %.4f)\n", outputs[k], wants[k], outputs[k], outputs[k])
+		// fmt.Println("rdiff:", wants[k], outputs[k], rdiff[k])
 	}
 
-	for k := range o.outputs {
-		rdiff[k] = -(o.outputs[k] - wants[k]) * o.outputs[k] * (1 - o.outputs[k])
-		// fmt.Printf("\nrdiff: -(%.4f - %.4f) * %.4f * (1 - %.4f)\n", o.outputs[k], wants[k], o.outputs[k], o.outputs[k])
-		// fmt.Println("rdiff:", wants[k], o.outputs[k], rdiff[k])
-	}
-
-	// print3(true, "o.lastInput:", o.lastInput)
-	// print2(true, "o.weights 1:", o.weights)
-	for j := 0; j < len(o.lastInput); j++ {
-		for y := 0; y < o.y; y++ {
-			for x := 0; x < o.x; x++ {
+	// print1(true, "rdiff:", rdiff)
+	// print2(true, "o.Weights 1:", o.Weights)
+	for k := 0; k < o.lastInput.D; k++ {
+		index := 0
+		for y := 0; y < o.lastInput.H; y++ {
+			for x := 0; x < o.lastInput.W; x++ {
 				sum := 0.0
-				for k := range o.outputs {
-					// fmt.Printf("sum: (%.4f * %.4f)\n", rdiff[k], o.weights[k][(j*o.x*o.y)+o.y*y+x])
-					sum += rdiff[k] * o.weights[k][(j*o.x*o.y)+o.y*y+x]
+				for k := range outputs {
+					// fmt.Printf("sum: (%.4f * %.4f)\n", rdiff[k], o.Weights[k][index])
+					sum += rdiff[k] * o.Weights[k][index]
 				}
-				// fmt.Printf("r: %.4f * %.4f * (1 - %.4f)\n", sum, o.lastInput[j][y][x], o.lastInput[j][y][x])
-				rinput[j][y][x] = sum * o.lastInput[j][y][x] * (1 - o.lastInput[j][y][x])
+				// fmt.Printf("r: %.4f * %.4f * (1 - %.4f)\n", sum, o.lastInput.Data[k][y][x], o.lastInput.Data[k][y][x])
+				rinput.Data[k][y][x] = sum * o.lastInput.Data[k][y][x] * (1 - o.lastInput.Data[k][y][x])
+				index++
 			}
 		}
 	}
 
-	// print3("o.lastInput:", o.lastInput)
-	// print1("outputs:", outputs)
-	for j := 0; j < len(o.lastInput); j++ {
-		for y := 0; y < o.y; y++ {
-			for x := 0; x < o.x; x++ {
-				for k := range o.outputs {
-					// fmt.Printf("w: %.4f - %.4f * %.4f * %.4f\n", o.weights[k][(j*o.x*o.y)+o.y*y+x], o.lastInput[j][y][x], rdiff[k], learnRate)
-					o.weights[k][(j*o.x*o.y)+o.y*y+x] += (o.lastInput[j][y][x] * rdiff[k] * learnRate)
+	// print3(true, "o.lastInput:", o.lastInput.GetData())
+	// print3(true, "rinput:", rinput.Data)
+	for j := range outputs {
+		for k := 0; k < o.lastInput.D; k++ {
+			// index := 0
+			for y := 0; y < o.y; y++ {
+				for x := 0; x < o.x; x++ {
+					// fmt.Printf("%d-%d w: %.4f + %.4f * %.4f * %.4f\n", j, (k*o.x*o.y)+y*o.x+x, o.Weights[j][(k*o.x*o.y)+o.y*y+x], o.lastInput.Data[k][y][x], rdiff[j], learnRate)
+					o.Weights[j][(k*o.x*o.y)+y*o.x+x] += (o.lastInput.Data[k][y][x] * rdiff[j] * learnRate)
+					// if index == 169 {
+					// 	fmt.Println(111)
+					// }
+					// index++
 				}
 			}
 		}
 	}
-	// print2("o.weights 2:", o.weights)
+	// print2(true, "o.Weights 2:", o.Weights)
 
 	// fmt.Println("input:\n", outputs)
 	// fmt.Println("rinput:\n", rinput)
 	return rinput
 }
 
+// ToJSON ...
+func (o *Softmax) ToJSON() string {
+	bs, _ := json.Marshal(o.Weights)
+	return string(bs)
+}
+
+// FromJSON ...
+func (o *Softmax) FromJSON(bs string) error {
+	return json.Unmarshal([]byte(bs), &o.Weights)
+}
+
+// SaveJSON ...
+func (o *Softmax) SaveJSON(file string) error {
+	return ioutil.WriteFile(file, []byte(o.ToJSON()), 0644)
+}
+
+// LoadJSON ...
+func (o *Softmax) LoadJSON(file string) error {
+	bs, err := ioutil.ReadFile(file)
+	if err != nil {
+		return err
+	}
+	return o.FromJSON(string(bs))
+}
+
+/*
 // SoftmaxHelper ...
 func SoftmaxHelper(inputW, inputH int, conv *Convolution, pool *MaxPool) (int, int) {
-	return int(math.Ceil(float64(inputW-(conv.w-conv.step)) / float64(conv.step) / float64(pool.w))),
-		int(math.Ceil(float64(inputH-(conv.h-conv.step)) / float64(conv.step) / float64(pool.h)))
+	return int(math.Ceil(float64(inputW-(conv.W-conv.step)) / float64(conv.step) / float64(pool.W))),
+	int(math.Ceil(float64(inputH-(conv.H-conv.step)) / float64(conv.step) / float64(pool.H)))
 }
+*/

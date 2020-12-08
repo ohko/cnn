@@ -1,4 +1,4 @@
-package neatgo
+package cnn
 
 import (
 	"fmt"
@@ -62,77 +62,13 @@ func print3(debug bool, name string, input [][][]float64) {
 	}
 }
 
-func normalization(input [][]float64) [][]float64 {
+func Normalization(input [][]float64) [][]float64 {
 	for y := 0; y < len(input); y++ {
 		for x := 0; x < len(input[0]); x++ {
 			input[y][x] /= 0xff
 		}
 	}
 	return input
-}
-
-func matrixMul(img [][][]float64, filter [][][]float64) [][][]float64 {
-	w, h, d := len(filter[0][0]), len(filter[0]), len(filter)
-	imw, imh := len(img[0][0]), len(img[0])
-	// fmt.Println(w, h, d)
-	// fmt.Println(len(img), imw, imh)
-	out := make([][][]float64, len(img)*d)
-
-	for j := 0; j < len(img); j++ {
-		for k := 0; k < d; k++ {
-			tmp := make([][]float64, imh-h+1)
-			for y := 0; y <= imh-h; y++ {
-				row := make([]float64, imw-w+1)
-				for x := 0; x <= imw-w; x++ {
-					sum := 0.0
-					// htm := []string{}
-					for b := 0; b < h; b++ {
-						for a := 0; a < w; a++ {
-							sum += img[j][y+b][x+a] * filter[k][b][a]
-							// htm = append(htm, fmt.Sprintf("%.4f*%.4f=%.4f", img[j][y+b][x+a], filter[k][b][a], img[j][y+b][x+a]*filter[k][b][a]))
-						}
-					}
-					// row[x] = sum / 0xff
-					row[x] = sum
-					// fmt.Println(strings.Join(htm, " + "), sum)
-				}
-				tmp[y] = row
-			}
-			out[j*d+k] = tmp
-		}
-	}
-
-	return out
-}
-
-func rotate180(filter [][][]float64) [][][]float64 {
-	w, h, d := len(filter[0][0]), len(filter[0]), len(filter)
-	out := make([][][]float64, d)
-	tmp := make([]float64, w*h*d)
-
-	for k := 0; k < d; k++ {
-		t := make([][]float64, h)
-		for y := 0; y < h; y++ {
-			row := make([]float64, w)
-			for x := 0; x < w; x++ {
-				tmp[k*w*h+y*h+x] = filter[k][y][x]
-			}
-			t[y] = row
-		}
-		out[k] = t
-	}
-	index := len(tmp) - 1
-	for k := 0; k < d; k++ {
-		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
-				out[k][y][x] = tmp[index]
-				index--
-			}
-		}
-	}
-
-	// fmt.Println(tmp)
-	return out
 }
 
 var randBool bool

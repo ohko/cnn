@@ -1,67 +1,92 @@
-package neatgo
+package cnn
 
 import (
+	"cnn/mnist"
 	"fmt"
+	"log"
 	"testing"
 )
 
+//*
 // go test cnn -run TestCNN -v -count=1
 func TestCNN(t *testing.T) {
-	input := [][][]float64{normalization([][]float64{
-		{1, 2, 3, 2, 1},
-		{4, 5, 6, 5, 4},
-		{7, 8, 9, 8, 7},
-		{4, 5, 6, 5, 4},
-		{1, 2, 3, 2, 1},
-	}), normalization([][]float64{
-		{11, 22, 33, 22, 11},
-		{44, 55, 66, 55, 44},
-		{77, 88, 99, 88, 77},
-		{44, 55, 66, 55, 44},
-		{11, 22, 33, 22, 11},
-	})}
+	input := NewMatrix(3, 3, 2, func() float64 { return Random(0, 1) })
+	// input.SetData([][][]float64{Normalization([][]float64{
+	// 	{1, 2, 3},
+	// 	{4, 5, 6},
+	// 	{7, 8, 9},
+	// }), Normalization([][]float64{
+	// 	{11, 22, 33},
+	// 	{44, 55, 66},
+	// 	{77, 88, 99},
+	// })})
 	wants := []float64{1, 0}
 
-	conv := NewConvolution(2, 2, 2, 1)
-	conv2 := NewConvolution(2, 2, 2, 1)
-	pool := NewMaxPool(2, 2)
-	pool2 := NewMaxPool(2, 2)
+	c := NewConvolution(3, 3, 2, 2, 1)
+	// c.filters[0].SetData([][][]float64{
+	// 	{
+	// 		{1, 0, 1},
+	// 		{0, 1, 0},
+	// 		{1, 0, 1},
+	// 	},
+	// 	{
+	// 		{0, 1, 0},
+	// 		{1, 0, 1},
+	// 		{0, 1, 0},
+	// 	},
+	// })
+	settings := []interface{}{
+		// 5x5x2
+		c,
+		// 5x5x2
+		// NewConvolution(3, 3, 2, 2, 1),
+		// 5x5x2
+		NewMaxPool(2, 2),
+		// 3x3x2
+		// NewConvolution(3, 3, 2, 2, 1),
+		// 3x3x2
+		// NewMaxPool(2, 2),
+		// 2x2x2
+	}
+	softmax := NewSoftmax(2, 2, 2, len(wants))
+	// softmax := NewSoftmax(3, 3, 2, len(wants))
+
 	learnRate := 0.6
-
-	iw, ih, id := len(input[0][0]), len(input[0]), len(input)
-	sw, sh := SoftmaxHelper(iw, ih, conv, pool)
-	fmt.Printf("input size: %d*%d*%d\n", iw, ih, id)
-	fmt.Printf("conv size: %d*%d*%d step:%d\n", conv.w, conv.h, conv.depth, conv.step)
-	fmt.Printf("pool size: %d*%d\n", pool.w, pool.h)
-	fmt.Printf("softmax size: %d*%d\n", sw, sh)
-	fmt.Printf("learn rate: %.4f\n", learnRate)
-	softmax := NewSoftmax(sw, sh, conv.depth*len(input), len(wants))
-
-	count := 10000
+	count := 1
 	debug := false
 	if count == 1 {
 		debug = true
 		fmt.Print("\033c")
 	}
-	// conv => pool => conv => pool => softmax
-	// 4x4     2x2      1x1    1x1      2
+
+	// iw, ih, id := len(input[0][0]), len(input[0]), len(input)
+	// sw, sh := SoftmaxHelper(iw, ih, conv, pool)
+	// fmt.Printf("input size: %d*%d*%d\n", iw, ih, id)
+	// fmt.Printf("conv size: %d*%d*%d step:%d\n", conv.w, conv.h, conv.depth, conv.step)
+	// fmt.Printf("pool size: %d*%d\n", pool.w, pool.h)
+	// fmt.Printf("softmax size: %d*%d\n", sw, sh)
+	// fmt.Printf("learn rate: %.4f\n", learnRate)
+	// softmax := NewSoftmax(sw, sh, conv.depth*len(input), len(wants))
+
+	// conv[2x2] => conv[2x2] => pool[2x2] => conv[2x2] => pool[2x2] => softmax
+	// 5x5          5x5          3x3          3x3          2x2          4
 	for c := 0; c < count; c++ {
-		out := conv.Forward(input)
-		print3(debug, "conv", out)
-
-		out = pool.Forward(out)
-		print3(debug, "pool", out)
-
-		out = conv2.Forward(input)
-		print3(debug, "conv2", out)
-
-		out = pool2.Forward(out)
-		print3(debug, "pool2", out)
+		out := input
+		for _, v := range settings {
+			switch v.(type) {
+			case *Convolution:
+				out = v.(*Convolution).Forward(out)
+				print3(debug, "conv", out.GetData())
+			case *MaxPool:
+				out = v.(*MaxPool).Forward(out)
+				print3(debug, "pool", out.GetData())
+			}
+		}
 
 		outputs := softmax.Forward(out)
 		print1(debug, "outputs:", outputs)
 
-		if c%1000 == 0 {
+		if count == 1 || c%(count/10) == 0 {
 			fmt.Printf("LOSS: %d %.8f, %.8f\n", c, wants, outputs)
 		}
 
@@ -69,24 +94,25 @@ func TestCNN(t *testing.T) {
 			fmt.Println("\n===== BACKPROP =====")
 		}
 
-		gradient := softmax.Backprop(outputs, wants, learnRate)
-		print3(debug, "softmax.backprop", gradient)
+		gradient := softmax.Backprop(wants, outputs, learnRate)
+		print3(debug, "softmax.backprop", gradient.GetData())
 
-		gradient = pool2.Backprop(gradient)
-		print3(debug, "pool2.backprop", gradient)
-
-		gradient = conv2.Backprop(gradient, learnRate)
-		print3(debug, "conv2.filters", gradient)
-
-		gradient = pool.Backprop(gradient)
-		print3(debug, "pool.backprop", gradient)
-
-		gradient = conv.Backprop(gradient, learnRate)
-		print3(debug, "conv.filters", gradient)
+		for i := len(settings) - 1; i >= 0; i-- {
+			switch settings[i].(type) {
+			case *Convolution:
+				gradient = settings[i].(*Convolution).Backprop(gradient, learnRate)
+				print3(debug, "conv.backprop", gradient.GetData())
+			case *MaxPool:
+				gradient = settings[i].(*MaxPool).Backprop(gradient)
+				print3(debug, "pool.backprop", gradient.GetData())
+			}
+		}
 	}
 }
 
-/*
+//*/
+
+//*
 // go test cnn -run TestMnist -v -count=1
 func TestMnist(t *testing.T) {
 	dataTrain, err := mnist.ReadTrainSet("./mnist/MNIST_data")
@@ -95,62 +121,75 @@ func TestMnist(t *testing.T) {
 	}
 	log.Printf("MNISST train: N:%v | W:%v | H:%v", dataTrain.N, dataTrain.W, dataTrain.H)
 
-	conv := NewConvolution(3, 3, 1, 11)
-	pool := NewMaxPool(2, 2)
-	softmax := NewSoftmax(13, 13, 1, 10)
+	settings := []interface{}{
+		NewConvolution(3, 3, 1, 32, 1),
+		// NewConvolution(3, 3, 2, 2, 1),
+		NewMaxPool(2, 2),
+		// NewMaxPool(2, 2),
+	}
+	softmax := NewSoftmax(14, 14, 32, 10)
+	learnRate := 0.6
+
+	okla := make(map[int]bool)
 
 	debug := false
-	count := 2
-	for ccc := 0; ccc < 5; ccc++ {
-		fmt.Println("\nccc:", ccc)
+	for count := 0; count < 1000; count++ {
+		fmt.Println("\ncount:", count)
 		right := 0
 		for c, v := range dataTrain.Data {
-			bits := normalization(Uint8ToFloat64(v.Image))
+			if _, ok := okla[c]; ok {
+				continue
+			}
+			bits := Normalization(Uint8ToFloat64(v.Image))
 			wants := make([]float64, 10)
 			wants[v.Digit] = 1
 
-			out := conv.Forward(bits)
-			if count == 1 {
-				print3(debug, "conv", out)
+			input := NewMatrix(28, 28, 1, nil)
+			input.SetData([][][]float64{bits})
+			out := input
+			for _, vv := range settings {
+				switch vv.(type) {
+				case *Convolution:
+					out = vv.(*Convolution).Forward(out)
+					print3(debug, "conv", out.GetData())
+				case *MaxPool:
+					out = vv.(*MaxPool).Forward(out)
+					print3(debug, "pool", out.GetData())
+				}
 			}
 
-			out2 := pool.Forward(out)
-			if count == 1 {
-				print3(debug, "pool", out2)
-			}
+			outputs := softmax.Forward(out)
+			print1(debug, "outputs:", outputs)
 
-			if count == 1 {
-				print2(debug, "softmax.weights:", softmax.weights)
-			}
-			outputs := softmax.Forward(out2)
-			if count == 1 {
-				print1(debug, "outputs:", outputs)
-			}
 			maxI, maxV := GetMax(outputs)
 			if v.Digit == maxI && maxV > 0.9 {
 				right++
+				okla[c] = true
 			}
 			if c%100 == 0 {
-				fmt.Printf("\rLOSS:[%.3f%%] %d %d %.2f", float64(right)/float64(c)*100, c, v.Digit, outputs)
+				okr := float64(len(okla)) / float64(len(dataTrain.Data))
+				fmt.Printf("\rRIGHT:[%.3f%%] %d %d %.2f (%d)", okr*100, c, v.Digit, outputs, len(dataTrain.Data)-len(okla))
+				if okr > 0.8 {
+					break
+				}
 			}
 
-			if count == 1 {
+			if debug {
 				fmt.Println("\n===== BACKPROP =====")
 			}
 
-			learnRate := 0.6
-			gradient := softmax.Backprop(outputs, wants, learnRate)
-			if count == 1 {
-				print3(debug, "softmax.backprop", gradient)
-			}
-			gradient = pool.Backprop(gradient)
-			if count == 1 {
-				print3(debug, "pool.backprop", gradient)
-			}
-			// gradient = conv.Backprop(rotate180(gradient), learnRate)
-			gradient = conv.Backprop(gradient, pool.maxIndex, learnRate)
-			if count == 1 {
-				print3(debug, "conv.filters", gradient)
+			gradient := softmax.Backprop(wants, outputs, learnRate)
+			print3(debug, "softmax.backprop", gradient.GetData())
+
+			for i := len(settings) - 1; i >= 0; i-- {
+				switch settings[i].(type) {
+				case *Convolution:
+					// gradient = settings[i].(*Convolution).Backprop(gradient, learnRate)
+					print3(debug, "conv.filters", gradient.GetData())
+				case *MaxPool:
+					gradient = settings[i].(*MaxPool).Backprop(gradient)
+					print3(debug, "pool.backprop", gradient.GetData())
+				}
 			}
 			// time.Sleep(time.Second * 10)
 		}
@@ -163,36 +202,35 @@ func TestMnist(t *testing.T) {
 	{
 		right := 0
 		for c2, v := range dataCheck.Data {
-			bits := normalization(Uint8ToFloat64(v.Image))
+			bits := Normalization(Uint8ToFloat64(v.Image))
 			wants := make([]float64, 10)
 			wants[v.Digit] = 1
 
-			out := conv.Forward(bits)
-			if count == 1 {
-				print3(debug, "conv", out)
+			input := NewMatrix(28, 28, 1, nil)
+			input.SetData([][][]float64{bits})
+			out := input
+			for _, vv := range settings {
+				switch vv.(type) {
+				case *Convolution:
+					out = vv.(*Convolution).Forward(out)
+					print3(debug, "conv", out.GetData())
+				case *MaxPool:
+					out = vv.(*MaxPool).Forward(out)
+					print3(debug, "pool", out.GetData())
+				}
 			}
 
-			out2 := pool.Forward(out)
-			if count == 1 {
-				print3(debug, "pool", out2)
-			}
+			outputs := softmax.Forward(out)
+			print1(debug, "outputs:", outputs)
 
-			if count == 1 {
-				print2(debug, "softmax.weights:", softmax.weights)
-			}
-			outputs := softmax.Forward(out2)
-			if count == 1 {
-				print1(debug, "outputs:", outputs)
-			}
-			maxI, _ := GetMax(outputs)
-			if v.Digit == maxI {
+			maxI, maxV := GetMax(outputs)
+			if v.Digit == maxI && maxV > 0.9 {
 				right++
 			}
-			fmt.Printf("\rLOSS:[%.3f%%]", float64(right)/float64(c2)*100)
+			fmt.Printf("\rLOSS:[%.3f%%]", float64(c2-right)/float64(c2)*100)
 		}
 	}
 }
-// */
 
 // go test cnn -run Test1 -v -count=1
 func Test1(t *testing.T) {
@@ -218,7 +256,10 @@ func Test1(t *testing.T) {
 		return out
 	}
 
-	d1 := [][][]float64{
+	d1 := NewMatrix(5, 5, 1, nil)
+	d2 := NewMatrix(4, 4, 1, nil)
+
+	d1.SetData([][][]float64{
 		{
 			{0.51, 0.9, 0.88, 0.84, 0.05},
 			{0.4, 0.62, 0.22, 0.59, 0.1},
@@ -226,20 +267,55 @@ func Test1(t *testing.T) {
 			{0.47, 0.01, 0.85, 0.7, 0.09},
 			{0.76, 0.19, 0.72, 0.17, 0.57},
 		},
-	}
-	d2 := [][][]float64{
+	})
+	d2.SetData([][][]float64{
 		{
 			{0, 0, 0.0686, 0},
 			{0, 0.0364, 0, 0},
 			{0, 0.0467, 0, 0},
 			{0, 0, 0, -0.0681},
 		},
-	}
+	})
+	fmt.Println(cnn(d1.GetData()[0], d2.GetData()[0]))
 
-	d2r := rotate180(d2)
-	fmt.Println(rotate180(d2r))
-
-	fmt.Println(cnn(d1[0], d2[0]))
-	fmt.Println(cnn(d1[0], d2r[0]))
-	fmt.Println(matrixMul(d1, d2r))
+	d2.Rotate180()
+	fmt.Println(d2.GetData())
+	// fmt.Println(d1.Conv(d2).GetData())
 }
+
+//*/
+// go test -run Test_matrixMul cnn -v -count=1
+// func Test_matrixMul(t *testing.T) {
+// 	input := [][][]float64{
+// 		{
+// 			{1, 2, 3, 2, 1},
+// 			{4, 5, 6, 5, 4},
+// 			{7, 8, 9, 8, 7},
+// 			{4, 5, 6, 5, 4},
+// 			{1, 2, 3, 2, 1},
+// 		},
+// 		{
+// 			{11, 22, 33, 22, 11},
+// 			{44, 55, 66, 55, 44},
+// 			{77, 88, 99, 88, 77},
+// 			{44, 55, 66, 55, 44},
+// 			{11, 22, 33, 22, 11},
+// 		},
+// 	}
+
+// 	filter := [][][]float64{
+// 		{
+// 			{0.1, 0.2, 0.3},
+// 			{0.4, 0.5, 0.6},
+// 			{0.7, 0.8, 0.9},
+// 		},
+// 		{
+// 			{0.11, 0.22, 0.33},
+// 			{0.44, 0.55, 0.66},
+// 			{0.77, 0.88, 0.99},
+// 		},
+// 	}
+
+// 	out := matrixMul(input, filter)
+// 	print3(true, "out", out)
+// }
